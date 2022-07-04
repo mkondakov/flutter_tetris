@@ -1,10 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
-import 'package:flutter_tetris/tetris_model.dart';
+import 'tetris_model.dart';
+import 'tetris_figure.dart';
+import 'keyboard_handling.dart';
 
 void main() {
   runApp(const TetrisApp());
+}
+
+class LabelTextStyle {
+  static TextStyle? bodyText1(BuildContext context) {
+    return Theme.of(context).textTheme.bodyText1?.copyWith(
+          fontWeight: FontWeight.bold,
+          fontSize: 42,
+          color: Colors.white,
+          letterSpacing: 2.0,
+        );
+  }
 }
 
 class TetrisApp extends StatelessWidget {
@@ -27,66 +40,86 @@ class GamePage extends StatefulWidget {
 }
 
 class _GamePageState extends State<GamePage> {
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-        child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: Center(child: TetrisStateWidget())));
-  }
-}
-
-class TetrisStateWidget extends StatefulWidget {
-  const TetrisStateWidget({Key? key}) : super(key: key);
-
-  @override
-  State<TetrisStateWidget> createState() => _TetrisStateWidget();
-}
-
-class _TetrisStateWidget extends State<TetrisStateWidget> {
   late TetrisModel _model;
 
   @override
   void initState() {
     super.initState();
-    _model = TetrisModel(rowCount: 20, colCount: 10);
-    _model.destroyLinesAndShowNewFigure();
+    _model =
+        TetrisModel(rowCount: 20, colCount: 10, timerCallback: _handleTimer);
+    _model.start();
   }
 
-  handleKey(RawKeyEvent key) {
-    print("Event runtimeType is ${key.runtimeType}");
-    if (key.runtimeType.toString() == 'RawKeyDownEvent') {
-      RawKeyEventDataMacOs data = key.data as RawKeyEventDataMacOs;
-      print(data.keyCode == 123);
-      if (data.keyCode == 123) {
-        setState(() {
-          _model.left();
-        });
-      } else if (data.keyCode == 124) {
-        setState(() {
-          _model.right();
-        });
-      } else if (data.keyCode == 126) {
-        setState(() {
-          _model.rotate();
-        });
-      } else if (data.keyCode == 125) {
-        setState(() {
-          if (!_model.downIfPossible()) {
-            _model.gameState = _model.gameStatePlusFigure;
-            _model.destroyLinesAndShowNewFigure();
-          }
-        });
-      }
-      //String _keyCode;
-      //_keyCode = data.keyCode.toString(); //keycode of key event (66 is return)
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+        decoration: const BoxDecoration(
+          color: Color.fromARGB(255, 30, 30, 30),
+        ),
+        child: Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Center(
+                child: Row(children: <Widget>[
+              Expanded(
+                  child: Center(
+                      child: AspectRatio(
+                          aspectRatio: 0.5,
+                          child: TetrisStateWidget(model: _model)))),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text("Level: ${_model.gameSpeed}",
+                        style: LabelTextStyle.bodyText1(context)),
+                    Text("Score: ${_model.score}",
+                        style: LabelTextStyle.bodyText1(context)),
+                  ],
+                ),
+              ),
+            ]))));
+  }
 
-      //print("why does this run twice $_keyCode");
+  _handleTimer() {
+    setState(() {});
+  }
+}
+
+class TetrisStateWidget extends StatelessWidget {
+  TetrisStateWidget({Key? key, required this.model}) : super(key: key);
+
+  TetrisModel model;
+
+  _handleKey(RawKeyEvent key) {
+    var keyPressed = KeyboardHandling.getKey(key);
+    switch (keyPressed) {
+      case TetrisKey.left:
+        {
+          model.left();
+          break;
+        }
+      case TetrisKey.right:
+        {
+          model.right();
+          break;
+        }
+      case TetrisKey.up:
+        {
+          model.rotate();
+          break;
+        }
+      case TetrisKey.down:
+        {
+          model.down();
+          break;
+        }
+      case TetrisKey.space:
+        {
+          model.hardDrop();
+          break;
+        }
+      default:
+        break;
     }
   }
 
@@ -95,15 +128,17 @@ class _TetrisStateWidget extends State<TetrisStateWidget> {
     return RawKeyboardListener(
         autofocus: true,
         focusNode: FocusNode(),
-        onKey: handleKey,
+        onKey: _handleKey,
         child: GridView.builder(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 10),
           itemCount: 200,
           itemBuilder: (BuildContext context, int index) {
             return Card(
+              margin: const EdgeInsets.only(
+                  left: 1.0, right: 1.0, top: 1.0, bottom: 1.0),
               color: TetrisFigure.colors[
-                  _model.gameStatePlusFigure[(19 - (index ~/ 10)).toInt()]
+                  model.gameStatePlusFigure[(19 - (index ~/ 10)).toInt()]
                           [index % 10] %
                       TetrisFigure.colors.length],
               child: null,

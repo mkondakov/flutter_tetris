@@ -1,140 +1,95 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'tetris_figure.dart';
 
-class TetrisFigure {
-  TetrisFigure(
-      {required this.figures,
-      required this.position,
-      required this.colorIndex}) {
-    rotationIndex = Random().nextInt(figures.length);
-    for (var i = 0; i < figures.length; i++) {
-      for (var j = 0; j < figures[i].length; j++) {
-        for (var k = 0; k < figures[i][j].length; k++) {
-          if (figures[i][j][k] != 0) {
-            figures[i][j][k] = colorIndex;
-          }
-        }
-      }
-    }
-  }
-
-  late int colorIndex;
-  Point<int> position;
-  List<List<List<int>>> figures;
-  int rotationIndex = 0;
-
-  TetrisFigure clone() {
-    var tf = TetrisFigure(
-        figures: figures, position: position, colorIndex: colorIndex);
-    tf.rotationIndex = rotationIndex;
-    tf.colorIndex = colorIndex;
-    return tf;
-  }
-
-  static const List<List<List<List<int>>>> figuresList = [
-    [
-      [
-        [1, 1],
-        [1, 1],
-      ],
-    ],
-    [
-      [
-        [0, 1, 0, 0],
-        [0, 1, 0, 0],
-        [0, 1, 0, 0],
-        [0, 1, 0, 0],
-      ],
-      [
-        [0, 0, 0, 0],
-        [0, 0, 0, 0],
-        [1, 1, 1, 1],
-        [0, 0, 0, 0],
-      ],
-    ],
-    [
-      [
-        [0, 0, 0],
-        [0, 1, 1],
-        [1, 1, 0],
-      ],
-      [
-        [0, 1, 0],
-        [0, 1, 1],
-        [0, 0, 1],
-      ],
-    ],
-    [
-      [
-        [0, 1, 0],
-        [0, 1, 0],
-        [1, 1, 0],
-      ],
-      [
-        [0, 0, 0],
-        [1, 1, 1],
-        [0, 0, 1],
-      ],
-      [
-        [1, 1, 0],
-        [1, 0, 0],
-        [1, 0, 0],
-      ],
-      [
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 1, 1],
-      ],
-    ]
-  ];
-
-  static final List<Color> colors = <Color>[
-    Colors.black,
-    Colors.red,
-    Colors.pink,
-    Colors.purple,
-    Colors.deepPurple,
-    Colors.indigo,
-    Colors.blue,
-    Colors.lightBlue,
-    Colors.cyan,
-    Colors.teal,
-    Colors.green,
-    Colors.lightGreen,
-    Colors.lime,
-    Colors.yellow,
-    Colors.amber,
-    Colors.orange,
-    Colors.deepOrange,
-    Colors.brown,
-    Colors.blueGrey,
-  ];
-}
+enum TetrisGameState { initialized, started, finished, paused }
 
 class TetrisModel {
-  TetrisModel({required this.rowCount, required this.colCount})
+  TetrisModel(
+      {required this.rowCount,
+      required this.colCount,
+      required this.timerCallback})
       : gameState = List.generate(
             rowCount, (i) => List<int>.filled(colCount, 0),
             growable: false),
         gameStatePlusFigure = List.generate(
             rowCount, (i) => List<int>.filled(colCount, 0),
-            growable: false) {}
+            growable: false),
+        state = TetrisGameState.initialized,
+        gameSpeed = 1,
+        score = 0 {}
 
   final int rowCount;
   final int colCount;
 
+  VoidCallback timerCallback;
+  TetrisGameState state;
+  int gameSpeed;
   List<List<int>> gameState;
   List<List<int>> gameStatePlusFigure;
   TetrisFigure? currentFigure;
+  int score;
+
+  Timer? fallTimer;
+  Timer? addSpeedTimer;
+
+  initialize() {
+    gameState = List.generate(rowCount, (i) => List<int>.filled(colCount, 0),
+        growable: false);
+    gameStatePlusFigure = List.generate(
+        rowCount, (i) => List<int>.filled(colCount, 0),
+        growable: false);
+
+    gameSpeed = 1;
+    score = 0;
+    fallTimer?.cancel();
+    fallTimer = null;
+
+    addSpeedTimer?.cancel();
+    addSpeedTimer = null;
+
+    state = TetrisGameState.initialized;
+  }
+
+  start() {
+    initialize();
+    destroyLinesAndShowNewFigure();
+
+    _resetFallDawnTimer();
+    addSpeedTimer = Timer(const Duration(seconds: 30), _handleAddSpeedTimer);
+    state = TetrisGameState.started;
+  }
+
+  finish() {
+    fallTimer?.cancel();
+    fallTimer = null;
+
+    addSpeedTimer?.cancel();
+    addSpeedTimer = null;
+
+    state = TetrisGameState.finished;
+  }
+
+  _handleFallTimer() {
+    down();
+  }
+
+  _resetFallDawnTimer() {
+    int fallSpeed = 1300 ~/ gameSpeed;
+    fallTimer?.cancel();
+    fallTimer = null;
+    fallTimer = Timer(Duration(milliseconds: fallSpeed), _handleFallTimer);
+  }
+
+  _handleAddSpeedTimer() {
+    gameSpeed += 1;
+  }
 
   left() {
+    if (state != TetrisGameState.started) return;
     if (currentFigure == null) return;
     var cf = currentFigure!;
-
-    // if (cf.position.x <= 0) {
-    //   return;
-    // }
-
     var nf = cf.clone();
     nf.position = Point(cf.position.x - 1, cf.position.y);
 
@@ -142,16 +97,13 @@ class TetrisModel {
       currentFigure = nf;
       gameStatePlusFigure = statePlusFigure();
     }
+    timerCallback();
   }
 
   right() {
+    if (state != TetrisGameState.started) return;
     if (currentFigure == null) return;
     var cf = currentFigure!;
-
-    // if (cf.position.x >= colCount - cf.figure[0].length) {
-    //   return;
-    // }
-
     var nf = cf.clone();
     nf.position = Point(cf.position.x + 1, cf.position.y);
 
@@ -159,9 +111,40 @@ class TetrisModel {
       currentFigure = nf;
       gameStatePlusFigure = statePlusFigure();
     }
+    timerCallback();
   }
 
-  bool downIfPossible() {
+  hardDrop() {
+    if (state != TetrisGameState.started) return;
+    _resetFallDawnTimer();
+
+    int dropdownScores = 0;
+    while (_downIfPossible()) {
+      dropdownScores += 1;
+    }
+    score += dropdownScores;
+    gameState = gameStatePlusFigure;
+    destroyLinesAndShowNewFigure();
+    if (_isStateCollideWith(currentFigure!)) {
+      finish();
+    }
+    timerCallback();
+  }
+
+  down() {
+    if (state != TetrisGameState.started) return;
+    _resetFallDawnTimer();
+    if (!_downIfPossible()) {
+      gameState = gameStatePlusFigure;
+      destroyLinesAndShowNewFigure();
+      if (_isStateCollideWith(currentFigure!)) {
+        finish();
+      }
+    }
+    timerCallback();
+  }
+
+  bool _downIfPossible() {
     if (currentFigure == null) return false;
     var cf = currentFigure!;
 
@@ -182,6 +165,7 @@ class TetrisModel {
   }
 
   rotate() {
+    if (state != TetrisGameState.started) return;
     if (currentFigure == null) return;
     var cf = currentFigure!;
 
@@ -190,6 +174,7 @@ class TetrisModel {
       if (!_isStateCollideWith(cf)) {
         currentFigure = cf;
         gameStatePlusFigure = statePlusFigure();
+        timerCallback();
         return;
       }
     }
@@ -253,6 +238,8 @@ class TetrisModel {
   }
 
   _destroyLines() {
+    int destroyedLinesCount = 0;
+
     for (var i = rowCount - 1; i >= 0; i--) {
       bool rowIsFull = true;
       for (var j = 0; j < colCount; j++) {
@@ -263,6 +250,7 @@ class TetrisModel {
       }
 
       if (rowIsFull) {
+        destroyedLinesCount += 1;
         for (var ii = i; ii < rowCount; ii++) {
           for (var j = 0; j < colCount; j++) {
             if (ii == rowCount - 1) {
@@ -274,6 +262,19 @@ class TetrisModel {
         }
       }
     }
+
+    int coef = 0;
+    if (destroyedLinesCount == 1) {
+      coef = 40;
+    } else if (destroyedLinesCount == 2) {
+      coef = 100;
+    } else if (destroyedLinesCount == 3) {
+      coef = 300;
+    } else if (destroyedLinesCount == 4) {
+      coef = 1200;
+    }
+
+    score += coef * gameSpeed;
   }
 
   _showNewFigure() {
@@ -284,13 +285,12 @@ class TetrisModel {
             (j) => List<int>.from(TetrisFigure.figuresList[index][i][j]),
             growable: false),
         growable: false);
-    __showNewFigure(figures);
+    __showNewFigure(figures, index + 1);
   }
 
-  __showNewFigure(List<List<List<int>>> figures) {
+  __showNewFigure(List<List<List<int>>> figures, int colorIndex) {
     int x = (colCount - figures[0][0].length) ~/ 2;
     int y = rowCount - figures[0].length;
-    int colorIndex = Random().nextInt(TetrisFigure.colors.length - 1) + 1;
     currentFigure = TetrisFigure(
         figures: figures, position: Point(x, y), colorIndex: colorIndex);
     gameStatePlusFigure = statePlusFigure();
@@ -319,7 +319,6 @@ class TetrisModel {
         }
       }
     }
-    print(state);
     return state;
   }
 }
